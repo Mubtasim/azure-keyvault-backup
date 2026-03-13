@@ -1,0 +1,19 @@
+# Environment variables — never commit secrets
+.env
+.env.*
+
+# Backup output files
+backups/
+*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
