@@ -21,7 +21,7 @@ pip install requests python-dotenv
 
 ## 2. Set Up Your `.env` File
 
-Create a file named `.env` in the same folder as `backup_keyvault.py` and fill in your values:
+Create a file named `.env` in the same folder as `backup-keyvault.py` and fill in your values:
 
 ```env
 AZURE_KEYVAULT_URI=https://your-vault-name.vault.azure.net/
@@ -56,7 +56,7 @@ AZURE_SCOPE=https://vault.azure.net/.default
 ## 3. Run the Backup
 
 ```bash
-python backup_keyvault.py
+python backup-keyvault.py
 ```
 
 That's it. The script will:
@@ -115,6 +115,80 @@ Your service principal needs the following **Key Vault access policy** (or RBAC 
 | RBAC equivalent | `Key Vault Secrets User` |
 
 To set this in the Azure Portal: **Key Vault → Access policies → Add Access Policy → Secret permissions: List + Get**.
+
+---
+
+## 6. Batch Insert Secrets from CSV
+
+`restore-keyvault.py` writes many secrets at once from a CSV file. It uses the same `.env` file. Each row is sent as a `PUT /secrets/{name}` — the same call as setting a secret from Postman.
+
+### CSV format
+
+Only `name` and `value` are required:
+
+```csv
+name,value
+FIVE-STARS-PROD-DPO-GATE-PASSED,true
+api-key,abc123
+```
+
+All columns:
+
+| Column | Required | Notes |
+|---|---|---|
+| `name` | yes | Letters, digits and hyphens only |
+| `value` | yes | Quote it if it contains commas, e.g. `"a,b"` |
+| `content_type` | no | e.g. `text/plain` |
+| `tags` | no | `key=value` pairs separated by `;`, e.g. `env=prod;owner=team-a` |
+| `expires` | no | `2027-12-31` or `2027-12-31T23:59:59Z` (UTC) |
+| `enabled` | no | `true` / `false` — defaults to `true` |
+
+Empty optional columns are not sent, so the new version has no content type, tags or expiry — just like a plain Postman call. If an existing secret had tags or an expiry, the new version will not have them unless you fill those columns in.
+
+The whole file is validated first (invalid names, duplicates, empty values, bad tags/dates). If any row is invalid, nothing is written.
+
+> ⚠️ CSV files contain secret values in plain text. `*.csv` is in `.gitignore` — delete the file when you're done.
+
+### Commands
+
+```bash
+# Always preview first — nothing is written
+python restore-keyvault.py secrets.csv --dry-run
+
+# Write the secrets
+python restore-keyvault.py secrets.csv
+```
+
+| Option | Description |
+|---|---|
+| `--dry-run` | Show what would be created / updated / skipped without writing |
+| `--vault URI` | Target a different vault than `AZURE_KEYVAULT_URI` |
+| `--mode skip-unchanged` | **Default.** Skip secrets whose current value already matches |
+| `--mode skip-existing` | Never touch secrets that already exist |
+| `--mode overwrite` | Always write (creates a new version every time) |
+| `--only "prod-*,api-key"` | Only process these names / patterns |
+| `--exclude "legacy-*"` | Skip these names / patterns |
+| `--workers 5` | Number of parallel requests (default 5) |
+| `--recover-deleted` | Recover soft-deleted secrets before writing them |
+
+Sample output:
+
+```
+INFO      [CREATE]    FIVE-STARS-PROD-DPO-GATE-PASSED
+INFO      [SKIP]      api-key                          (unchanged)
+INFO      [UPDATE]    db-password                      (value differs)
+WARNING   [CONFLICT]  old-token                        (soft-deleted; use --recover-deleted or purge it)
+INFO      Summary: 1 create, 1 update, 1 skip, 1 conflict, 0 failed
+```
+
+The script exits with code `1` if any secret failed or conflicted. Throttling (`429`) is retried automatically.
+
+### Required permissions
+
+| Permission type | Required permissions |
+|---|---|
+| Secret permissions | `Get`, `Set` (+ `Recover` for `--recover-deleted`) |
+| RBAC equivalent | `Key Vault Secrets Officer` |
 
 ---
 
