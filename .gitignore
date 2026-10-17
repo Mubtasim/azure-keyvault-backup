@@ -1,6 +1,7 @@
 # Environment variables — never commit secrets
 .env
 .env.*
+!.env.example
 
 # Backup output files
 backups/

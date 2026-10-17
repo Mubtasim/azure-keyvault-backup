@@ -1,12 +1,28 @@
-# Azure Key Vault — Secrets Backup Guide
+# azure-keyvault-backup
 
-Back up all secrets from your Azure Key Vault to a local JSON file with a single command.
+Two small Python scripts for getting secrets out of and back into Azure Key Vault, using only the Key Vault REST API and a service principal. No Azure CLI or SDK needed.
+
+- **`backup-keyvault.py`** exports every enabled secret (value, content type, tags, dates) to a timestamped JSON file and prints its SHA-256 checksum.
+- **`restore-keyvault.py`** batch-writes secrets from a CSV. It validates the whole file before writing anything, supports `--dry-run`, skips unchanged values by default, recovers soft-deleted secrets on request, runs requests in parallel, and retries throttling (`429`) and `5xx` errors with backoff.
+
+I wrote these to back up and seed the Key Vaults of production projects without clicking through the Azure Portal one secret at a time.
+
+## Quick start
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env                       # fill in your vault and service principal
+python backup-keyvault.py                  # → backups/keyvault_backup_<timestamp>.json
+python restore-keyvault.py secrets.csv --dry-run
+```
+
+The full guide follows.
 
 ---
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - An Azure service principal with **read access** to the Key Vault
 
 ---
@@ -14,7 +30,7 @@ Back up all secrets from your Azure Key Vault to a local JSON file with a single
 ## 1. Install Dependencies
 
 ```bash
-pip install requests python-dotenv
+pip install -r requirements.txt
 ```
 
 ---
@@ -128,7 +144,7 @@ Only `name` and `value` are required:
 
 ```csv
 name,value
-FIVE-STARS-PROD-DPO-GATE-PASSED,true
+feature-flag-enabled,true
 api-key,abc123
 ```
 
@@ -174,7 +190,7 @@ python restore-keyvault.py secrets.csv
 Sample output:
 
 ```
-INFO      [CREATE]    FIVE-STARS-PROD-DPO-GATE-PASSED
+INFO      [CREATE]    feature-flag-enabled
 INFO      [SKIP]      api-key                          (unchanged)
 INFO      [UPDATE]    db-password                      (value differs)
 WARNING   [CONFLICT]  old-token                        (soft-deleted; use --recover-deleted or purge it)
@@ -204,4 +220,4 @@ The script exits with code `1` if any secret failed or conflicted. Throttling (`
 → Your service principal lacks permissions on the Key Vault. See Section 5 above.
 
 **`ModuleNotFoundError: No module named 'dotenv'`**
-→ Run `pip install python-dotenv`.
+→ Run `pip install -r requirements.txt`.
