@@ -6,6 +6,9 @@
 backups/
 *.json
 
+# Secret input files for restore-keyvault.py
+*.csv
+
 # Python
 __pycache__/
 *.py[cod]
